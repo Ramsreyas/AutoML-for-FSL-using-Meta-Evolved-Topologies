@@ -1,0 +1,29 @@
+# ===================================================
+# Python Cache & Virtual Environments
+# ===================================================
+__pycache__/
+*.pyc
+.env
+venv/
+
+# ===================================================
+# Data, Results, and Models
+# (These folders can become very large)
+# ===================================================
+data/
+results/
+models/
+
+# ===================================================
+# External Libraries
+# (We manage these, not Git)
+# ===================================================
+third_party/
+
+# ===================================================
+# IDE & OS-specific files
+# (These are specific to your machine)
+# ===================================================
+.vscode/
+.idea/
+*.DS_Store
