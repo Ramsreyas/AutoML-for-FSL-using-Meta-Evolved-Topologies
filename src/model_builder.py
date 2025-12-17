@@ -1,7 +1,7 @@
 # src/model_builder.py
 # ==============================================================================
 # MODULE: MODEL BUILDER (M3)
-# Research Standard: Dynamic graph construction with dummy-pass size inference.
+# Correction: Dummy input generation now uses input_channels correctly.
 # ==============================================================================
 
 import torch
@@ -17,12 +17,13 @@ class DynamicCNN(nn.Module):
         self.ways = ways
         
         # 1. Build the Feature Extractor (The "Body")
+        # output_channels tells us the depth of the LAST layer (e.g., 64)
         self.features, output_channels = self._build_features(genotype, input_channels)
-        
+
         # 2. Calculate Linear Input Size (The "Bridge")
-        # Research Standard: Use a dummy forward pass to find the exact output size.
-        # This handles any combination of pooling/stride without manual math.
-        self.flattened_size = self._get_flattened_size(output_channels, image_size)
+        # FIX: We must pass 'input_channels' (1) to create the dummy input,
+        # not 'output_channels' (64).
+        self.flattened_size = self._get_flattened_size(input_channels, image_size)
 
         # 3. Build the Classifier (The "Head")
         self.classifier = nn.Linear(self.flattened_size, ways)
@@ -56,7 +57,9 @@ class DynamicCNN(nn.Module):
 
     def _get_flattened_size(self, channels, image_size):
         with torch.no_grad():
+            # Create a dummy image of size (1, Input_Channels, 28, 28)
             dummy_input = torch.zeros(1, channels, image_size, image_size)
+            # Pass it through the network to see what shape comes out
             dummy_output = self.features(dummy_input)
             # Flatten: [Batch, Channels, Height, Width] -> [Batch, Flat_Size]
             return dummy_output.view(1, -1).size(1)
