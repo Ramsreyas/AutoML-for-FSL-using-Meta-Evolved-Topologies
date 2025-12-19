@@ -1,30 +1,41 @@
-# main.py
-# ==============================================================================
-# PROJECT: AutoML for FSL using Meta-Evolved Topologies
-# MODULE: Main Execution Script (M5)
-# ==============================================================================
-
+# main.py (Modular Version - Search Only)
 import os
 import torch
 import numpy as np
 import random
 import time
-from src.data_loader import create_task_generator
+import json
+from deap import tools
+from src.data_loader import create_task_generator   
 from src.evolution import EvolutionaryEngine
 from src.model_builder import build_model_from_genotype
 from src.fitness import evaluate_fitness
 
-# --- CONFIGURATION (The Control Panel) ---
-# Research Standard: Use a fixed seed for reproducibility
+# --- CONFIGURATION -----------------------------------------------------------
+# Select Experiment ID manually here:
+# 1 = 5-Way 1-Shot
+# 2 = 5-Way 5-Shot
+# 3 = 20-Way 1-Shot
+EXPERIMENT_ID = 1
+
+if EXPERIMENT_ID == 1:
+    EXP_NAME = "5Way_1Shot"
+    N_WAY = 5; K_SHOT = 1
+elif EXPERIMENT_ID == 2:
+    EXP_NAME = "5Way_5Shot"
+    N_WAY = 5; K_SHOT = 5
+elif EXPERIMENT_ID == 3:
+    EXP_NAME = "20Way_1Shot"
+    N_WAY = 20; K_SHOT = 1
+
+print(f"--- STARTING SEARCH MODULE: {EXP_NAME} ---")
+
+# Research Constants
 SEED = 42
-N_WAY = 5
-K_SHOT = 1
 QUERY_SAMPLES = 15
 ADAPTATION_STEPS = 5
-INNER_LR = 0.5
-NUM_TASKS_PER_EVAL = 50  # 50 tasks for fast evolution, we validate the best later with 500
-
-# Evolutionary Parameters
+INNER_LR = 0.1
+NUM_TASKS_SEARCH = 50  # Fast proxy
 POPULATION_SIZE = 20
 GENERATIONS = 10
 MUTATION_RATE = 0.3
@@ -32,103 +43,76 @@ CROSSOVER_RATE = 0.6
 
 # Paths
 DATASET_ROOT = '/content/data'
-CHECKPOINT_PATH = '/content/drive/MyDrive/AutoML-for-FSL-using-Meta-Evolved-Topologies/experiment_checkpoint.pkl'
-RESULTS_PATH = '/content/drive/MyDrive/AutoML-for-FSL-using-Meta-Evolved-Topologies/results.txt'
+DRIVE_ROOT = '/content/drive/MyDrive/AutoML-for-FSL-using-Meta-Evolved-Topologies'
+CHECKPOINT_PATH = os.path.join(DRIVE_ROOT, f'checkpoint_{EXP_NAME}.pkl')
+RESULTS_PATH = os.path.join(DRIVE_ROOT, f'results_{EXP_NAME}.txt')
+CHAMPION_PATH = os.path.join(DRIVE_ROOT, f'champion_{EXP_NAME}.json')
 
 def set_seed(seed):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
+    if torch.cuda.is_available(): torch.cuda.manual_seed(seed)
+
+def save_champion(ind, filepath):
+    with open(filepath, 'w') as f:
+        json.dump(ind, f)
+    print(f"Champion genotype saved to {filepath}")
 
 def main():
-    print("--- Starting AutoML-FSL Evolutionary Search ---")
     set_seed(SEED)
-    
-    # 1. Initialize M1: Data Loader
-    print(f"Loading Data (N={N_WAY}, K={K_SHOT})...")
+    print(f"Loading Data ({N_WAY}-Way, {K_SHOT}-Shot)...")
     task_generator = create_task_generator(DATASET_ROOT, N_WAY, K_SHOT, QUERY_SAMPLES)
     
-    # 2. Initialize M2: Evolutionary Engine
-    engine = EvolutionaryEngine(
-        population_size=POPULATION_SIZE, 
-        mutation_rate=MUTATION_RATE, 
-        crossover_rate=CROSSOVER_RATE
-    )
-    
-    # 3. Check for Checkpoint (The Safety Net)
+    engine = EvolutionaryEngine(POPULATION_SIZE, MUTATION_RATE, CROSSOVER_RATE)
     population, start_gen = engine.load_checkpoint(CHECKPOINT_PATH)
     
     if population is None:
-        print("No checkpoint found. Initializing new population...")
+        print("Initializing new population...")
         population = engine.initialize_population()
         start_gen = 0
     else:
         print(f"Resuming from Generation {start_gen}...")
 
-    # 4. The Main Evolutionary Loop
+    # Evolutionary Loop
     for gen in range(start_gen, GENERATIONS):
         print(f"\n=== GENERATION {gen + 1} / {GENERATIONS} ===")
         start_time = time.time()
         
-        # A. Evaluation Step (M4)
-        # We only evaluate individuals that have invalid fitness (newly created or mutated)
+        # Evaluate
         invalid_ind = [ind for ind in population if not ind.fitness.valid]
-        print(f"Evaluating {len(invalid_ind)} new/modified architectures...")
+        print(f"Evaluating {len(invalid_ind)} candidates...")
         
         for i, ind in enumerate(invalid_ind):
-            # M3: Build the Model
             try:
                 model = build_model_from_genotype(ind, N_WAY)
-                
-                # M4: Evaluate Fitness
-                fitness_score = evaluate_fitness(
-                    model=model,
-                    task_generator=task_generator,
-                    ways=N_WAY,
-                    shots=K_SHOT,
-                    query_samples=QUERY_SAMPLES,
-                    adaptation_steps=ADAPTATION_STEPS,
-                    inner_lr=INNER_LR,
-                    num_tasks_to_test=NUM_TASKS_PER_EVAL
-                )
-            except Exception as e:
-                print(f"  [Warning] Invalid architecture generated. Assigning 0 fitness. Error: {e}")
-                fitness_score = 0.0
+                score = evaluate_fitness(model, task_generator, N_WAY, K_SHOT, QUERY_SAMPLES, ADAPTATION_STEPS, INNER_LR, NUM_TASKS_SEARCH)
+            except:
+                score = 0.0
+            ind.fitness.values = (score,)
+            if (i+1)%5==0: print(f"  Processed {i+1}/{len(invalid_ind)}")
 
-            # Assign fitness tuple (DEAP requires a tuple)
-            ind.fitness.values = (fitness_score,)
-            
-            # Simple progress log
-            if (i+1) % 5 == 0:
-                print(f"  Processed {i+1}/{len(invalid_ind)} candidates.")
-
-        # B. Logging Statistics
+        # Log Stats
         fits = [ind.fitness.values[0] for ind in population]
         best_fit = max(fits)
         avg_fit = sum(fits) / len(population)
         print(f"  Stats -> Max: {best_fit:.4f} | Avg: {avg_fit:.4f}")
         
-        # Save Log to Drive
         with open(RESULTS_PATH, "a") as f:
             f.write(f"Gen {gen+1}: Max={best_fit:.4f}, Avg={avg_fit:.4f}\n")
 
-        # C. Evolution Step (Create Next Generation)
-        # We skip this for the very last generation so we can keep the final population
+        # Next Gen (unless last)
         if gen < GENERATIONS - 1:
             population = engine.evolve_next_generation(population)
-            
-            # D. Save Checkpoint (Crucial!)
             engine.save_checkpoint(population, gen + 1, CHECKPOINT_PATH)
+        
+        print(f"Gen took {time.time() - start_time:.2f}s")
 
-        print(f"Generation took {time.time() - start_time:.2f} seconds.")
-
-    # 5. Conclusion
-    print("\n--- Evolution Complete ---")
+    # Save Champion
+    print("\n--- Search Complete. Saving Champion... ---")
     best_ind = tools.selBest(population, 1)[0]
-    print(f"Best Genotype Found: {best_ind}")
-    print(f"Best Fitness: {best_ind.fitness.values[0]:.4f}")
+    save_champion(best_ind, CHAMPION_PATH)
+    print(f"Best Search Score: {best_ind.fitness.values[0]:.4f}")
 
 if __name__ == "__main__":
     main()
