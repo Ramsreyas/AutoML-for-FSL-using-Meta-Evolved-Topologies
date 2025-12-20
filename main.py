@@ -105,17 +105,24 @@ def run_experiment(n_way, k_shot, exp_name):
         json.dump(best_ind, f)
     print(f"✅ Search Complete. Champion DNA saved.")
 
+
     # --- PHASE 2: GENERATE GRAPH ---
     print("\n--- [2/4] Generating Evolution Graph ---")
     try:
         gens, maxs, avgs = [], [], []
         with open(results_path, 'r') as f:
             for line in f:
-                # Format: "Gen X: Max=0.1234, Avg=0.1234"
+                if "Max=" not in line: continue
+                
                 parts = line.strip().split()
-                maxs.append(float(parts[2].split('=')[1]))
-                avgs.append(float(parts[3].split('=')[1]))
+                # FIX: Added .replace(',', '') to handle trailing commas
+                max_val = float(parts[2].split('=')[1].replace(',', ''))
+                avg_val = float(parts[3].split('=')[1].replace(',', ''))
+                
+                maxs.append(max_val)
+                avgs.append(avg_val)
                 gens.append(len(maxs))
+        
                 
         plt.figure(figsize=(10,6))
         plt.plot(gens, maxs, 'r-o', linewidth=2, label='Champion Accuracy')
