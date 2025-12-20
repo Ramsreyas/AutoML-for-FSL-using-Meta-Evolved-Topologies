@@ -170,9 +170,9 @@ def run_experiment(n_way, k_shot, exp_name):
 if __name__ == "__main__":
     # === UNCOMMENT ONLY ONE LINE BELOW TO RUN AN EXPERIMENT ===
     
-    run_experiment(n_way=5, k_shot=1, exp_name="EXP1_5Way_1Shot")
+    # run_experiment(n_way=5, k_shot=1, exp_name="EXP1_5Way_1Shot")
     
-    # run_experiment(n_way=5, k_shot=5, exp_name="EXP2_5Way_5Shot")
+    run_experiment(n_way=5, k_shot=5, exp_name="EXP2_5Way_5Shot")
     
     # run_experiment(n_way=20, k_shot=1, exp_name="EXP3_20Way_1Shot")
     
