@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), 'src')))
 
 # 2. Import your modules
-from src.model_builder import build_baseline_cnn
+from src.model_builder_base import build_baseline_cnn
 from src.data_loader import create_task_generator
 from src.fitness import evaluate_fitness
 
