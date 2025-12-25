@@ -19,7 +19,7 @@ def run_experiment(experiment_name, ways, shots, device, data_root):
     
     # Standard Omniglot Params
     QUERY_SAMPLES = 15      
-    ADAPTATION_STEPS = 5    
+    ADAPTATION_STEPS = 1    
     INNER_LR = 0.25         
     NUM_TASKS = 100  # Fast validation
     
